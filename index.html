@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Jazz Morning</title>
+  <style>
+    :root {
+      --bg:      oklch(14% 0.01 240);
+      --leaf-1:  oklch(58% 0.14 140);
+      --leaf-2:  oklch(62% 0.16 80);
+      --leaf-3:  oklch(55% 0.18 55);
+      --leaf-4:  oklch(50% 0.15 30);
+      --accent:  oklch(68% 0.16 245);
+      --accent-h:oklch(60% 0.16 245);
+      --btn-size: clamp(72px, 22vw, 96px);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Canvas for leaves ── */
+    canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    /* ── Player widget ── */
+    .player {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .btn-play {
+      width: var(--btn-size);
+      height: var(--btn-size);
+      border-radius: 50%;
+      border: none;
+      background: var(--accent);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 120ms ease, transform 100ms ease;
+      outline: none;
+      flex-shrink: 0;
+    }
+    .btn-play:hover  { background: var(--accent-h); }
+    .btn-play:active { transform: scale(0.92); }
+    .btn-play:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 4px;
+    }
+    .btn-play svg {
+      width: 42%;
+      height: 42%;
+      fill: #fff;
+      pointer-events: none;
+    }
+
+    .label {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: clamp(11px, 3.5vw, 14px);
+      color: oklch(70% 0.04 240);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div class="player">
+  <button class="btn-play" id="btn" aria-label="Play" onclick="toggle()">
+    <svg id="ico-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    <svg id="ico-stop" viewBox="0 0 24 24" style="display:none"><path d="M6 6h12v12H6z"/></svg>
+  </button>
+  <span class="label" id="lbl" aria-live="polite">Jazz Morning</span>
+</div>
+
+<audio id="audio" src="jazz.mp3" preload="auto"></audio>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+// ── Telegram WebApp ──────────────────────────────────────────────────────────
+if (window.Telegram?.WebApp) {
+  Telegram.WebApp.ready();
+  Telegram.WebApp.expand();
+}
+
+// ── Audio ────────────────────────────────────────────────────────────────────
+const audio  = document.getElementById('audio');
+const btn    = document.getElementById('btn');
+const iPlay  = document.getElementById('ico-play');
+const iStop  = document.getElementById('ico-stop');
+const lbl    = document.getElementById('lbl');
+
+function setPlaying(on) {
+  iPlay.style.display = on ? 'none'  : 'block';
+  iStop.style.display = on ? 'block' : 'none';
+  btn.setAttribute('aria-label', on ? 'Stop' : 'Play');
+  lbl.textContent = on ? '\u25aa Playing' : 'Jazz Morning';
+}
+
+audio.addEventListener('ended', () => setPlaying(false));
+
+function toggle() {
+  if (audio.paused) {
+    audio.play().then(() => setPlaying(true)).catch(() => {
+      lbl.textContent = 'Tap to play';
+    });
+  } else {
+    audio.pause();
+    setPlaying(false);
+  }
+}
+
+// Auto-play on load
+window.addEventListener('load', () => {
+  audio.play().then(() => setPlaying(true)).catch(() => {
+    // Browser blocked autoplay — user must tap
+    lbl.textContent = 'Tap to play';
+  });
+});
+
+// ── Falling leaves (canvas) ──────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+
+const COLORS  = ['#6dbd6d','#c4a93a','#c47a3a','#b84f2e'];
+const COUNT   = 28;
+const TWO_PI  = Math.PI * 2;
+
+let W, H, leaves = [];
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', () => { resize(); });
+
+function randomLeaf() {
+  return {
+    x:    Math.random() * W,
+    y:    -20 - Math.random() * H * 0.3,
+    rx:   4 + Math.random() * 6,   // ellipse x-radius
+    ry:   2 + Math.random() * 3,   // ellipse y-radius
+    rot:  Math.random() * TWO_PI,
+    drot: (Math.random() - 0.5) * 0.04,
+    vx:   (Math.random() - 0.5) * 0.8,
+    vy:   0.6 + Math.random() * 1.2,
+    sway: Math.random() * TWO_PI,
+    swayS:0.008 + Math.random() * 0.008,
+    swayA:30 + Math.random() * 50,
+    color:COLORS[Math.floor(Math.random() * COLORS.length)],
+    alpha:0.55 + Math.random() * 0.35,
+  };
+}
+
+for (let i = 0; i < COUNT; i++) {
+  const l = randomLeaf();
+  l.y = Math.random() * H;   // seed spread across full height
+  leaves.push(l);
+}
+
+function drawLeaf(l) {
+  ctx.save();
+  ctx.translate(l.x, l.y);
+  ctx.rotate(l.rot);
+  ctx.globalAlpha = l.alpha;
+  ctx.fillStyle   = l.color;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, l.rx, l.ry, 0, 0, TWO_PI);
+  ctx.fill();
+  // stem
+  ctx.strokeStyle = l.color;
+  ctx.globalAlpha = l.alpha * 0.6;
+  ctx.lineWidth   = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(l.rx * 0.9, 0);
+  ctx.stroke();
+  ctx.restore();
+}
+
+let pref = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function animate() {
+  requestAnimationFrame(animate);
+  ctx.clearRect(0, 0, W, H);
+
+  if (pref) return;
+
+  for (const l of leaves) {
+    l.sway += l.swayS;
+    l.x    += l.vx + Math.sin(l.sway) * 0.6;
+    l.y    += l.vy;
+    l.rot  += l.drot;
+
+    if (l.y > H + 20) {
+      Object.assign(l, randomLeaf());
+    }
+
+    drawLeaf(l);
+  }
+}
+animate();
+</script>
+</body>
+</html>
